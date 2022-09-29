@@ -8,18 +8,22 @@ function save_fig(prefix, filename, extension, fig)
     end
 end
 
-struct Params
+struct WindowingParams
     T0::Real
     Twin::Real
     Tstep::Real
     Tind::Real
     T1::Real
-    Rwin::Int
-    Rstep::Int
-    Rind::Int
-    R1::Int
+    Nwin::Int
+    Nstep::Int
+    Nind::Int
+    N1::Int
+end
+
+function roundint(x::Real)
+    return Int( round( x ) )
 end
 
 function get_step(T::Real, T0::Real)
-    return Int( round(T / T0) )
+    return roundint(T / T0)
 end
