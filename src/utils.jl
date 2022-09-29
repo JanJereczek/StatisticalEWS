@@ -10,14 +10,12 @@ end
 
 struct WindowingParams
     T0::Real
-    Twin::Real
-    Tstep::Real
-    Tind::Real
-    T1::Real
-    Nwin::Int
-    Nstep::Int
-    Nind::Int
-    N1::Int
+    Tsmooth::Real
+    Tindctr::Real
+    Tstride::Real
+    Nsmooth::Int
+    Nindctr::Int
+    Nstride::Int
 end
 
 function roundint(x::Real)
@@ -26,4 +24,11 @@ end
 
 function get_step(T::Real, T0::Real)
     return roundint(T / T0)
+end
+
+function lines_numeric!(ax, t, x, lbl)
+    filt = .!isnan.(x)
+    x_filt = x[ filt ]
+    t_filt = t[ filt ]
+    lines!(ax, t_filt, x_filt, label = lbl)
 end
