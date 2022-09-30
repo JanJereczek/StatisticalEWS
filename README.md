@@ -1,5 +1,7 @@
 # StatisticalEWS
 
+## Getting started
+
 This code base is using the Julia Language and [DrWatson](https://juliadynamics.github.io/DrWatson.jl/stable/)
 to make a reproducible scientific project named
 > StatisticalEWS
@@ -20,3 +22,9 @@ To (locally) reproduce this project, do the following:
 
 This will install all necessary packages for you to be able to run the scripts and
 everything should work out of the box, including correctly finding local paths.
+
+## Aim
+
+This repository is a prototype for a future package. It aims to provide the basic tools for the computation of statistical early warning signals (EWSs). These should allow the recognition of a state approaching a critical transition by analysis of the associated time series.
+
+Examples are provided in the *scripts* folder.
