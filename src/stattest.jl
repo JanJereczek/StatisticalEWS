@@ -10,7 +10,7 @@ end
 
 # Generate ns surrogates of x.
 function fourier_surrogates(x::Vector{T}, ns::Int) where {T<:Real}
-    S = zeros(ns, length(x))
+    S = zeros(T, ns, length(x))
     for i in axes(S, 1)
         S[i, :] = fourier_surrogate(x)
     end
@@ -19,7 +19,7 @@ end
 
 function fourier_surrogates(X::Matrix{T}, ns::Int) where {T<:Real}
     nx, nt = size(X)
-    S = zeros(nx, nt, ns)
+    S = zeros(T, nx, nt, ns)
     for i in 1:nx
         S[i, :, :] = fourier_surrogates(X[i, :], ns)'
     end
@@ -28,7 +28,7 @@ end
 
 function fourier_surrogates2D(X::Matrix{T}, ns::Int) where {T<:Real}
     nx, nt = size(X)
-    S = zeros(nx*ns, nt)
+    S = zeros(T, nx*ns, nt)
     for i in 1:nx
         S[(i-1)*ns+1:i*ns, :] = fourier_surrogates(X[i, :], ns)
     end

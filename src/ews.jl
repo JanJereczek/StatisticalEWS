@@ -46,6 +46,11 @@ function cumean(x::CuArray{T, 2}) where {T<:Real}
     return reduce( +, x, dims=2) ./ size(x, 2)
 end
 
+# Mean on GPU (helper).
+function cumean(X::CuArray{T, 2}, M::CuArray{T, 2}, pwin::WindowingParams) where {T<:Real}
+    return (X * M) ./ (2*pwin.Nindctr+1)
+end
+
 # Variance on CPU.
 function variance(x::Vector{T}) where {T<:Real}
     return StatsBase.var(x)
@@ -117,14 +122,20 @@ function ar1_whitenoise(x::CuArray{T, 2}) where {T<:Real}
     return reduce( +, x[:, 2:end] .* x[:, 1:end-1], dims=2) ./ reduce( +, x[:, 2:end] .* x[:, 2:end], dims=2)
 end
 
-function ar1_whitenoise(
+function gpuMask(
     X::CuArray{T, 2},
     pwin::WindowingParams,
 ) where {T<:Real}
-
     nt = size(X, 2)
-    M = CuArray( diagm([i => ones(nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...) )
-    return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .* X[:, 2:end]) * M )
+    M = CuArray( diagm([i => ones(T, nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...) )
+    return M
+end
+
+function ar1_whitenoise(
+    X::CuArray{T, 2},
+    M::CuArray{T, 2},
+) where {T<:Real}
+    return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .^ 2) * M )
 end
 
 function ar1_whitenoise(X::CuArray{T, 3}, pwin::WindowingParams) where {T<:Real}
@@ -208,7 +219,7 @@ end
 
 function slide_estimator(x::Vector{T}, hw::Int, estimator, windowing::String) where {T<:Real}
     nx = length(x)
-    stat = fill(NaN, nx)
+    stat = fill(T(NaN), nx)
     if windowing == "center"
         for i in (hw+1):(nx-hw)
             x_windowed = centered_window( x, i, hw )
