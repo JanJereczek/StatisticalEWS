@@ -7,7 +7,7 @@ using CUDA, BenchmarkTools
 # Rollmean with output length = input length.
 function gettrend_rollmean(x::Vector{T}, hw::Int) where {T<:Real}
     xtrend = rollmean(x, 2*hw+1)
-    xtrend = vcat( fill(T(NaN), hw), xtrend, fill(T(NaN), hw) )
+    # xtrend = vcat( fill(T(NaN), hw), xtrend, fill(T(NaN), hw) )
     # xtrend = vcat( x[1:hw], xtrend, x[end-hw+1:end] )
     return xtrend
 end
@@ -198,12 +198,12 @@ end
 # - if matrix input, apply mapslices.
 function slide_estimator(x::Vector{T}, hw::Int, estimator) where {T<:Real}
     nx = length(x)
-    stat = fill(NaN, nx)
+    stat = fill(T(NaN), nx)
     for i in (hw+1):(nx-hw)
         x_windowed = centered_window( x, i, hw )
         stat[i] = estimator(x_windowed)
     end
-    return stat
+    return stat[ .!isnan.(stat) ]
 end
 
 function slide_estimator(x::Vector{T}, hw::Int, estimator, windowing::String) where {T<:Real}

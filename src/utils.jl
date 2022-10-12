@@ -28,6 +28,9 @@ centered_window(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (id
 left_window(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - 2*hw):idx ]
 right_window(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, idx:(idx + 2*hw) ]
 
+trim_win(x::Vector{T}, hw::Int) where {T<:Real} = x[hw+1:end-hw]
+trim_win(X::Matrix{T}, hw::Int) where {T<:Real} = X[:, hw+1:end-hw]
+
 #####################################################
 #%% Saving
 #####################################################
