@@ -118,7 +118,7 @@ function ar1_whitenoise(x::CuArray{T, 2}) where {T<:Real}
 end
 
 function ar1_whitenoise(
-    X::Union{CuArray{T, 2}, Adjoint{T, CuArray{T, 2}}},
+    X::CuArray{T, 2},
     pwin::WindowingParams,
 ) where {T<:Real}
 
@@ -128,9 +128,9 @@ function ar1_whitenoise(
 end
 
 function ar1_whitenoise(X::CuArray{T, 3}, pwin::WindowingParams) where {T<:Real}
-    TI = zeros(T, size(X))
+    TI = zeros(T, size(X,1), size(X,2)-1, size(X,3))
     for i in axes(TI, 1)
-        TI[i, :, :] = Array( ar1_whitenoise(X[i, :, :]', pwin) )'
+        TI[i, :, :] = Array( ar1_whitenoise( permutedims(X[i, :, :]), pwin ) )'
     end
     return TI
 end
