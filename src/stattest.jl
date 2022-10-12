@@ -17,6 +17,14 @@ function fourier_surrogates(x::Vector{T}, ns::Int) where {T<:Real}
     return S
 end
 
+function fourier_surrogates(X::Matrix{T}, ns::Int) where {T<:Real}
+    nx, nt = size(X)
+    S = zeros(nx, nt, ns)
+    for i in 1:nx
+        S[i, :, :] = fourier_surrogates(X[i, :], ns)'
+    end
+    return S
+end
 #####################################################
 #%% Increase detection via Kendall-tau or regression
 #####################################################

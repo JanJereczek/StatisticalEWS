@@ -7,8 +7,8 @@ using CUDA, BenchmarkTools
 # Rollmean with output length = input length.
 function gettrend_rollmean(x::Vector{T}, hw::Int) where {T<:Real}
     xtrend = rollmean(x, 2*hw+1)
-    # xtrend = vcat( fill(NaN, hw), xtrend, fill(NaN, hw) )
-    xtrend = vcat( x[1:hw], xtrend, x[end-hw:hw] )
+    xtrend = vcat( fill(T(NaN), hw), xtrend, fill(T(NaN), hw) )
+    # xtrend = vcat( x[1:hw], xtrend, x[end-hw+1:end] )
     return xtrend
 end
 
@@ -117,10 +117,22 @@ function ar1_whitenoise(x::CuArray{T, 2}) where {T<:Real}
     return reduce( +, x[:, 2:end] .* x[:, 1:end-1], dims=2) ./ reduce( +, x[:, 2:end] .* x[:, 2:end], dims=2)
 end
 
-function ar1_whitenoise(X::CuArray{T, 2}, pwin) where {T<:Real}
+function ar1_whitenoise(
+    X::Union{CuArray{T, 2}, Adjoint{T, CuArray{T, 2}}},
+    pwin::WindowingParams,
+) where {T<:Real}
+
     nt = size(X, 2)
     M = CuArray( diagm([i => ones(nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...) )
     return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .* X[:, 2:end]) * M )
+end
+
+function ar1_whitenoise(X::CuArray{T, 3}, pwin::WindowingParams) where {T<:Real}
+    TI = zeros(T, size(X))
+    for i in axes(TI, 1)
+        TI[i, :, :] = Array( ar1_whitenoise(X[i, :, :]', pwin) )'
+    end
+    return TI
 end
 
 function ar1_whitenoise(X::Matrix{T}, pwin) where {T<:Real}
@@ -216,19 +228,21 @@ function slide_estimator(x::Vector{T}, hw::Int, estimator, windowing::String) wh
     return stat
 end
 
-function slide_estimator(S::Matrix{T}, hw::Int, estimator) where {T<:Real}
-    return mapslices( x -> slide_estimator(x, hw, estimator), S, dims = 2 )
+function slide_estimator(X::Union{Matrix{T}, Adjoint{T, Matrix{T}}}, hw::Int, estimator) where {T<:Real}
+    return mapslices( x -> slide_estimator(x, hw, estimator), X, dims = 2 )
 end
 
-function slide_estimator(X::CuArray{T, 2}, window, pwin, estimator) where {T<:Real}
-    TI = Array(similar(X))
-    nt = size(X, 2)
-    for j in (pwin.Nsmooth + pwin.Nindctr + 1):(nt - pwin.Nsmooth - pwin.Nindctr)
-        TI[:, j] .= Array(estimator(window(X, j, pwin.Nindctr)))
+function slide_estimator(X::Array{T, 3}, hw::Int, estimator) where {T<:Real}
+    TI = similar(X)
+    for i in axes(TI, 1)
+        TI[i, :, :] = slide_estimator( X[i, :, :]', hw, estimator )'
     end
     return TI
 end
 
+function hardcore_slide_estimator(X::Array{T, 3}, hw::Int, estimator) where {T<:Real}
+    return mapslices( x -> (slide_estimator(x', hw, estimator))', X, dims = 1 )
+end
 
 # function left_window(hw::Int, nt::Int)
 #     i1 = 2*hw + 1
