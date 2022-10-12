@@ -148,8 +148,8 @@ end
 
 function ar1_whitenoise(X::Matrix{T}, pwin) where {T<:Real}
     nt = size(X, 2)
-    M = spdiagm([i => ones(nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...)
-    return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .* X[:, 2:end]) * M )
+    M = spdiagm([i => ones(T, nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...)
+    return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .^ 2) * M )
 end
 
 
