@@ -1,11 +1,4 @@
-#####################################################
-#%% Windowing
-#####################################################
-
-# Get window (half width hw) of vector x at index idx.
-centered_window(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - hw):( idx + hw ) ]
-left_window(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - 2*hw):idx ]
-right_window(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ idx:(idx + 2*hw) ]
+using CUDA, BenchmarkTools
 
 #####################################################
 #%% Smoothing
@@ -14,7 +7,8 @@ right_window(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ idx:(idx + 2*
 # Rollmean with output length = input length.
 function gettrend_rollmean(x::Vector{T}, hw::Int) where {T<:Real}
     xtrend = rollmean(x, 2*hw+1)
-    xtrend = vcat( x[1:hw], xtrend, x[end-hw+1:end] )
+    # xtrend = vcat( fill(NaN, hw), xtrend, fill(NaN, hw) )
+    xtrend = vcat( x[1:hw], xtrend, x[end-hw:hw] )
     return xtrend
 end
 
@@ -44,24 +38,69 @@ function detrend(x::Vector{T}, x_trend::Vector{T}) where {T<:Real}
 end
 
 #####################################################
-#%% EWIs
+#%% Statistical moments
 #####################################################
 
-# Statistical moments: variance, skewness and kurtosis.
+# Mean on GPU (helper).
+function cumean(x::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, x, dims=2) ./ size(x, 2)
+end
+
+# Variance on CPU.
 function variance(x::Vector{T}) where {T<:Real}
     return StatsBase.var(x)
 end
 
+# Variance on GPU.
+function variance(x::CuArray{T, 2}) where {T<:Real}
+    x_mean = reduce( +, x, dims=2) ./ size(x, 2)
+    return reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
+end
+
+# Variance on GPU with provided mean.
+function variance(x::CuArray{T, 2}, x_mean::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
+end
+
+# Skewness on CPU.
 function skw(x::Vector{T}) where {T<:Real}
     return StatsBase.skewness(x)
 end
 
+# Skewness on GPU.
+function skw(x::CuArray{T, 2}) where {T<:Real}
+    x_mean = reduce( +, x, dims=2) ./ size(x, 2)
+    x_var = reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
+    return reduce( +, ((x .- x_mean) ./ x_var) .^ 3, dims=2) ./ size(x, 2)
+end
+
+# Skewness on GPU with provided mean and variance.
+function skw(x::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, ((x .- x_mean) ./ x_var) .^ 3, dims=2) ./ size(x, 2)
+end
+
+# Kurtosis on CPU.
 function krt(x::Vector{T}) where {T<:Real}
     return StatsBase.kurtosis(x)
 end
 
+# Kurtosis on GPU.
+function krt(x::CuArray{T, 2}) where {T<:Real}
+    x_mean = reduce( +, x, dims=2) ./ size(x, 2)
+    x_var = reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
+    return reduce( +, ((x .- x_mean) ./ x_var) .^ 4, dims=2) ./ size(x, 2)
+end
+
+# Kurtosis on GPU with provided mean and variance.
+function krt(x::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, ((x .- x_mean) ./ x_var) .^ 4, dims=2) ./ size(x, 2)
+end
+
+#####################################################
+#%% AR1 model
+#####################################################
+
 # Compute AR1 coefficient θ of a vector x for white noise assumption.
-# Return rate is given by the inverse of the estimated coefficient.
 function ar1_whitenoise(x::Vector{T}) where {T<:Real}
     N = length(x)
     num = x[2:N]' * x[1:N-1]
@@ -70,35 +109,42 @@ function ar1_whitenoise(x::Vector{T}) where {T<:Real}
     return θ
 end
 
-# Compute AR1 coefficient θ of a vector x for AR1 noise assumption.
-function ar1_ar1noise(x::Vector{T}) where {T<:Real}
-    N = length(x)
-    θb = ar1_whitenoise(x)
-    V1 = x[3:N] - θb .* x[2:N-1]
-    V0 = x[2:N-1] - θb .* x[1:N-2]
-    ρb = V1' * V0 / ( V0' * V0 )
-    a = θb + ρb
-    b = ρb / θb
-    Δ = a^2 - 4*b
-    
-    # if Δ < 0
-    #     return NaN
-    # elseif (1 > θb > ρb > -1)
-    #     return (a + sqrt(Δ) ) / 2
-    # elseif (1 > ρb > θb > -1)
-    #     return (a - sqrt(Δ) ) / 2
-    # else
-    #     return NaN
-    # end
-
-    if (θb > ρb)
-        return real( (a + sqrt( complex(Δ)) ) / 2 )
-    elseif (ρb > θb)
-        return real( (a - sqrt( complex(Δ)) ) / 2 )
-    else
-        return NaN
-    end
+function ar1_whitenoise(X::Array{T}) where {T<:Real}
+    return mapslices( x_ -> ar1_whitenoise(x_), X, dims=2)
 end
+
+function ar1_whitenoise(x::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, x[:, 2:end] .* x[:, 1:end-1], dims=2) ./ reduce( +, x[:, 2:end] .* x[:, 2:end], dims=2)
+end
+
+function ar1_whitenoise(X::CuArray{T, 2}, pwin) where {T<:Real}
+    nt = size(X, 2)
+    M = CuArray( diagm([i => ones(nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...) )
+    return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .* X[:, 2:end]) * M )
+end
+
+function ar1_whitenoise(X::Matrix{T}, pwin) where {T<:Real}
+    nt = size(X, 2)
+    M = spdiagm([i => ones(nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...)
+    return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .* X[:, 2:end]) * M )
+end
+
+
+# TODO implement the TIs below.
+
+# Restoring rate on CPU.
+# assumes that noise has constant AC, not variance!
+function restoring_rate()
+end
+
+# Restoring rate estimated by generalised least square on CPU.
+# Works even for noise with varying AC and variance!
+function restoring_rate_gls()
+end
+
+#####################################################
+#%% Frequency spectrum
+#####################################################
 
 # Compute low-frequency power spectrum.
 function lfps(x::Vector{T}; q_lowfreq=0.1) where {T<:Real}
@@ -111,10 +157,11 @@ function lfps(x::Vector{T}; q_lowfreq=0.1) where {T<:Real}
     return sum( Pnorm[1:nlow] )
 end
 
-# TODO implement EWSs below
-function recovery_rate()
-end
+#####################################################
+#%% Spatial indicators
+#####################################################
 
+# TODO implement EWSs below
 function network_connectivity()
 end
 
@@ -130,12 +177,8 @@ end
 function density_ratio()
 end
 
-function check_std_endpoint(x::Vector{T}, xwin::Vector{T}, std_tol::Real) where {T<:Real}
-    return max(xwin) > std_tol * std(x)
-end
-
 #####################################################
-#%% From EWIs to EWS
+#%% Sliding indicators
 #####################################################
 
 # Mutliple dispatch:
@@ -176,3 +219,31 @@ end
 function slide_estimator(S::Matrix{T}, hw::Int, estimator) where {T<:Real}
     return mapslices( x -> slide_estimator(x, hw, estimator), S, dims = 2 )
 end
+
+function slide_estimator(X::CuArray{T, 2}, window, pwin, estimator) where {T<:Real}
+    TI = Array(similar(X))
+    nt = size(X, 2)
+    for j in (pwin.Nsmooth + pwin.Nindctr + 1):(nt - pwin.Nsmooth - pwin.Nindctr)
+        TI[:, j] .= Array(estimator(window(X, j, pwin.Nindctr)))
+    end
+    return TI
+end
+
+
+# function left_window(hw::Int, nt::Int)
+#     i1 = 2*hw + 1
+#     i2 = nt
+#     return i1, i2
+# end
+
+# function center_window(hw::Int, nt::Int)
+#     i1 = hw + 1
+#     i2 = nt - hw
+#     return i1, i2
+# end
+
+# function center_window(hw::Int, nt::Int)
+#     i1 = hw + 1
+#     i2 = nt - hw
+#     return i1, i2
+# end

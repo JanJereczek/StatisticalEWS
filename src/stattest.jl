@@ -85,3 +85,7 @@ end
 function get_percentile(ref_stat::T, sur_stat::Vector{T}) where {T<:Real}
     return sum(sur_stat .< ref_stat) / length(sur_stat)
 end
+
+function check_std_endpoint(x::Vector{T}, xwin::Vector{T}, std_tol::Real) where {T<:Real}
+    return max(xwin) > std_tol * std(x)
+end

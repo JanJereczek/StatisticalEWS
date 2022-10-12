@@ -1,5 +1,3 @@
-using DrWatson
-@quickactivate "StatisticalEWS"
 include(srcdir("init.jl"))
 
 function main(random_seed, trend_measure)
