@@ -17,7 +17,7 @@ function fourier_surrogates(x::Vector{T}, ns::Int) where {T<:Real}
     return S
 end
 
-function fourier_surrogates(X::Matrix{T}, ns::Int) where {T<:Real}
+function fourier_surrogates3D(X::Matrix{T}, ns::Int) where {T<:Real}
     nx, nt = size(X)
     S = zeros(T, nx, nt, ns)
     for i in 1:nx
@@ -50,6 +50,19 @@ function ridge_regression(t::Vector{T}, x::Vector{T}, λ::Real) where {T<:Real}
     T_bias_ext = hcat( t, ones(length(t)) )'
     w = inv(T_bias_ext * T_bias_ext' + λ .* I(2)) * T_bias_ext * x
     return w
+end
+
+# GPU version of ridge regression. Y must be nt x ns.
+function ridge_regression(t::Vector{T}, Y::CuArray{T, 2}, λ::Real) where {T<:Real}
+    t = t .- t[1]
+    T_bias_ext = hcat( t, ones(length(t)) )'
+    U = CuArray( inv(T_bias_ext * T_bias_ext' + λ .* I(2)) )
+    W = U * CuArray( T_bias_ext ) * Y
+    return W
+end
+
+function ridge_regression_slope(t::Vector{T}, Y::CuArray{T, 2}, λ::Real) where {T<:Real}
+    return permutedims( ridge_regression(t, Y, λ) )[:, 1]
 end
 
 function slide_regression(
@@ -103,6 +116,10 @@ function percentile_significance(ref_stat::Vector{T}, sur_stat::Matrix{T}) where
         end
     end
     return p
+end
+
+function percentile_significance(ref_stat::CuArray{T, 2}, sur_stat::CuArray{T,2}) where {T<:Real}
+    return reduce( +, sur_stat .< ref_stat, dims=1 ) ./ size(sur_stat, 1)
 end
 
 function get_percentile(ref_stat::T, sur_stat::Vector{T}) where {T<:Real}

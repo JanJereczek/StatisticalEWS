@@ -106,3 +106,66 @@ function ar1_ar1noise(x::Vector{T}) where {T<:Real}
         return NaN
     end
 end
+
+
+
+
+# function left_window(hw::Int, nt::Int)
+#     i1 = 2*hw + 1
+#     i2 = nt
+#     return i1, i2
+# end
+
+# function center_window(hw::Int, nt::Int)
+#     i1 = hw + 1
+#     i2 = nt - hw
+#     return i1, i2
+# end
+
+# function center_window(hw::Int, nt::Int)
+#     i1 = hw + 1
+#     i2 = nt - hw
+#     return i1, i2
+# end
+
+
+tulliomean(X::Matrix{T}, hw::Int) where {T<:Real} = @tullio μ1[x,y] := begin
+    i = x
+    j = y
+    @inbounds sum( X[i,j-hw:j+hw] ) / T(2*hw+1)  # not 2*hw+1 for unbiased estimate.
+end (x in axes(X,1), y in axes(X,2))
+
+tulliovar(X::Matrix{T}, hw::Int) where {T<:Real} = @tullio μ2[x,y] := begin
+    i = x
+    j = y
+    @inbounds sum( (X[i,j-hw:j+hw] .- sum( X[i,j-hw:j+hw] ) / T(2*hw+1) ).^2 ) / T(2*hw)
+end (x in axes(X,1), y in axes(X,2))
+
+tulliovar(X::Matrix{T}, μ1::Matrix{T}, hw::Int) where {T<:Real} = @tullio μ2[x,y] := begin
+    i = x
+    j = y
+    @inbounds sum( (X[i,j-hw:j+hw] .- μ1[i,j] ).^2 ) / T(2*hw)
+end (x in axes(X,1), y in axes(X,2))
+
+tullioskewness( X::Matrix{T}, μ1::Matrix{T}, μ2::Matrix{T}, hw::Int) where {T<:Real} = @tullio μ3[x,y] := begin
+    i = x
+    j = y
+    @inbounds sum( (X[i,j-hw:j+hw] .- μ1[i,j] ).^3 ) / T(2*hw+1) / ((μ2[i,j]) ^ T(1.5))
+end (x in axes(X,1), y in axes(X,2))
+
+tulliokurtosis( X::Matrix{T}, μ1::Matrix{T}, μ2::Matrix{T}, hw::Int) where {T<:Real} = @tullio μ4[x,y] := begin
+    i = x
+    j = y
+    @inbounds sum( (X[i,j-hw:j+hw] .- μ1[i,j] ).^4 ) / T(2*hw+1) / ((μ2[i,j]) ^ 2)
+end (x in axes(X,1), y in axes(X,2))
+
+tullio_ar1( X::Matrix{T}, hw::Int ) where {T<:Real} = @tullio θ[x,y] := begin
+    i = x
+    j = y
+    @inbounds sum( X[i, (j-hw+1):(j+hw)] .* X[i, (j-hw):(j+hw-1)] ) / sum(X[i, (j-hw+1):(j+hw)] .* X[i, (j-hw+1):(j+hw)] )
+end (x in axes(X,1), y in axes(X,2))
+
+tullio_ar1( X::Matrix{T}, hw::Int ) where {T<:Real} = @tullio θ[:,y] := begin
+    j = y
+    @inbounds sum( (X[:, (j-hw+1):(j+hw)] .* X[:, (j-hw):(j+hw-1)]) ) ./ sum( (X[:, (j-hw+1):(j+hw)] .^ 2) )
+end (x in axes(X,1), y in axes(X,2))

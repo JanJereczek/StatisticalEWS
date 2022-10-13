@@ -3,14 +3,16 @@
 #####################################################
 struct WindowingParams
     T0::Real
-    Tsmooth::Real
-    Tindctr::Real
-    Tsignif::Real
-    Tstride::Real
-    Nsmooth::Int
-    Nindctr::Int
-    Nsignif::Int
-    Nstride::Int
+    T_smooth_win::Real
+    T_indctr_win::Real
+    T_indctr_stride::Real
+    T_signif_win::Real
+    T_signif_stride::Real
+    N_smooth_win::Int
+    N_indctr_win::Int
+    N_indctr_stride::Int
+    N_signif_win::Int
+    N_signif_stride::Int
 end
 
 # Get window (half width hw) of vector x at index idx.

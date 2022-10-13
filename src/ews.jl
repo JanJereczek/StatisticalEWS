@@ -42,8 +42,8 @@ end
 #####################################################
 
 # Mean on GPU (helper).
-function cumean(x::CuArray{T, 2}) where {T<:Real}
-    return reduce( +, x, dims=2) ./ size(x, 2)
+function cumean(X::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, X, dims=2) ./ T(size(X, 2))
 end
 
 # Mean on GPU (helper).
@@ -56,15 +56,15 @@ function variance(x::Vector{T}) where {T<:Real}
     return StatsBase.var(x)
 end
 
-# Variance on GPU.
-function variance(x::CuArray{T, 2}) where {T<:Real}
-    x_mean = reduce( +, x, dims=2) ./ size(x, 2)
-    return reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
+# Variance on GPU with provided mean.
+function cuvar(X::CuArray{T, 2}, x_mean::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, (X .- x_mean).^2, dims=2) ./ T(size(X, 2) - 1)
 end
 
-# Variance on GPU with provided mean.
-function variance(x::CuArray{T, 2}, x_mean::CuArray{T, 2}) where {T<:Real}
-    return reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
+# Variance on GPU.
+function cuvar(X::CuArray{T, 2}) where {T<:Real}
+    x_mean = cumean(X)
+    return cuvar(X, x_mean)
 end
 
 # Skewness on CPU.
@@ -72,16 +72,16 @@ function skw(x::Vector{T}) where {T<:Real}
     return StatsBase.skewness(x)
 end
 
-# Skewness on GPU.
-function skw(x::CuArray{T, 2}) where {T<:Real}
-    x_mean = reduce( +, x, dims=2) ./ size(x, 2)
-    x_var = reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
-    return reduce( +, ((x .- x_mean) ./ x_var) .^ 3, dims=2) ./ size(x, 2)
+# Skewness on GPU with provided mean and variance.
+function cuskw(X::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, (X .- x_mean).^3, dims=2) ./ size(X, 2) ./ (x_var .^ T(1.5))
 end
 
-# Skewness on GPU with provided mean and variance.
-function skw(x::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
-    return reduce( +, ((x .- x_mean) ./ x_var) .^ 3, dims=2) ./ size(x, 2)
+# Skewness on GPU.
+function cuskw(X::CuArray{T, 2}) where {T<:Real}
+    x_mean = cumean(X)
+    x_var = cuvar(X)
+    return cuskw(X, x_mean, x_var)
 end
 
 # Kurtosis on CPU.
@@ -89,16 +89,16 @@ function krt(x::Vector{T}) where {T<:Real}
     return StatsBase.kurtosis(x)
 end
 
-# Kurtosis on GPU.
-function krt(x::CuArray{T, 2}) where {T<:Real}
-    x_mean = reduce( +, x, dims=2) ./ size(x, 2)
-    x_var = reduce( +, (x .- x_mean).^2, dims=2) ./ size(x, 2)
-    return reduce( +, ((x .- x_mean) ./ x_var) .^ 4, dims=2) ./ size(x, 2)
+# Kurtosis on GPU with provided mean and variance.
+function cukrt(X::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, (X .- x_mean) .^ 4, dims=2 ) ./ size(X, 2) ./ (x_var .^ 2)
 end
 
-# Kurtosis on GPU with provided mean and variance.
-function krt(x::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
-    return reduce( +, ((x .- x_mean) ./ x_var) .^ 4, dims=2) ./ size(x, 2)
+# Kurtosis on GPU.
+function cukrt(X::CuArray{T, 2}) where {T<:Real}
+    x_mean = cumean(X)
+    x_var = cuvar(X)
+    return cukrt(X, x_mean, x_var)
 end
 
 #####################################################
@@ -171,13 +171,19 @@ end
 
 # Compute low-frequency power spectrum.
 function lfps(x::Vector{T}; q_lowfreq=0.1) where {T<:Real}
-    Psymmetrical = abs.(fft(x) .^ 2)
+    Psymmetrical = abs.(rfft(x) .^ 2)
     N = length(Psymmetrical)
     P = Psymmetrical[ roundint(N/2+1):end ]
     n = length(P)
     Pnorm = P ./ sum(P)
     nlow = roundint( n * q_lowfreq )
     return sum( Pnorm[1:nlow] )
+end
+
+function lfps(X::CuArray{T, 2}) where {T<:Real}
+    P = abs.(CUDA.CUFFT.rfft( X, 2 )).^2
+    Pnorm = P ./ reduce(+, P, dims=2)
+    return reduce(+, Pnorm[:, 1:roundint(0.1 * size(Pnorm, 2))], dims=2)
 end
 
 #####################################################
@@ -243,6 +249,20 @@ function slide_estimator(X::Union{Matrix{T}, Adjoint{T, Matrix{T}}}, hw::Int, es
     return mapslices( x -> slide_estimator(x, hw, estimator), X, dims = 2 )
 end
 
+function slide_estimator(X::CuArray{T, 2}, pwin::WindowingParams, estimator) where {T<:Real}
+    
+    Nstride = pwin.Nstride
+    Nindctr = pwin.Nindctr
+
+    stride_idx = Nindctr+1:2*Nstride:size(X,2)-Nindctr
+    TI = zeros(T, size(X, 1), length(stride_idx) )
+    for j1 in eachindex(stride_idx)         # TODO this might be optimized with loop vectorization?
+        j2 = stride_idx[j1]
+        TI[:, j1] = Array( estimator( X[:, j2-Nindctr:j2+Nindctr] ) )
+    end
+    return TI
+end
+
 function slide_estimator(X::Array{T, 3}, hw::Int, estimator) where {T<:Real}
     TI = similar(X)
     for i in axes(TI, 1)
@@ -250,25 +270,3 @@ function slide_estimator(X::Array{T, 3}, hw::Int, estimator) where {T<:Real}
     end
     return TI
 end
-
-function hardcore_slide_estimator(X::Array{T, 3}, hw::Int, estimator) where {T<:Real}
-    return mapslices( x -> (slide_estimator(x', hw, estimator))', X, dims = 1 )
-end
-
-# function left_window(hw::Int, nt::Int)
-#     i1 = 2*hw + 1
-#     i2 = nt
-#     return i1, i2
-# end
-
-# function center_window(hw::Int, nt::Int)
-#     i1 = hw + 1
-#     i2 = nt - hw
-#     return i1, i2
-# end
-
-# function center_window(hw::Int, nt::Int)
-#     i1 = hw + 1
-#     i2 = nt - hw
-#     return i1, i2
-# end
