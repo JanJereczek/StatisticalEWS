@@ -1,4 +1,4 @@
-using LinearAlgebra, SparseArrays, CairoMakie
+using LinearAlgebra, SparseArrays, CairoMakie, CUDA
 
 #####################################################
 #%% Windowing
@@ -22,6 +22,10 @@ function get_windowing_params(Tvec::Vector{T}) where {T<:Real}
     return WindowingParams(Tvec..., N...)
 end
 
+# In the coming lines, some severe multiple dispatching is taking place.
+# This is used for the user to simply specify the window function of their choice.
+# All the rest happens under the hood.
+
 # Get window (half width hw) of vector x at index idx.
 centered_wndw(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - hw):( idx + hw ) ]
 left_wndw(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - 2*hw):idx ]
@@ -36,6 +40,11 @@ right_wndw(X::Matrix{T}, idx::Int, hw::Int) where {T<:Real} = X[ :, idx:(idx + 2
 centered_wndw(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - hw):( idx + hw ) ]
 left_wndw(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - 2*hw):idx ]
 right_wndw(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, idx:(idx + 2*hw) ]
+
+# Gives back the indices required for sliding as defined by the WindowingParams struct.
+centered_wndw(n_wndw::Int, n_strd::Int, nt::Int) = (n_wndw+1):n_strd:(nt-n_wndw)
+left_wndw(n_wndw::Int, n_strd::Int, nt::Int) = (2*n_wndw+1):n_strd:nt
+right_wndw(n_wndw::Int, n_strd::Int, nt::Int) = 1:n_strd:(nt-2*n_wndw)
 
 trim_wndw(x::Vector{T}, hw::Int) where {T<:Real} = x[hw+1:end-hw]
 trim_wndw(X::Matrix{T}, hw::Int) where {T<:Real} = X[:, hw+1:end-hw]

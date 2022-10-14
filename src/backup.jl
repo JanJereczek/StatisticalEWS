@@ -186,3 +186,63 @@ function fourier_surrogates3D(X::Matrix{T}, ns::Int) where {T<:Real}
     end
     return S
 end
+
+
+
+function slide_estimator(x::Vector{T}, hw::Int, estimator) where {T<:Real}
+    nx = length(x)
+    stat = fill(T(NaN), nx)
+    for i in (hw+1):(nx-hw)
+        x_wndwd = centered_wndw( x, i, hw )
+        stat[i] = estimator(x_wndwd)
+    end
+    return stat[ .!isnan.(stat) ]
+end
+
+function slide_estimator(x::Vector{T}, hw::Int, estimator, windowing::String) where {T<:Real}
+    nx = length(x)
+    stat = fill(T(NaN), nx)
+    if windowing == "center"
+        for i in (hw+1):(nx-hw)
+            x_wndwd = centered_wndw( x, i, hw )
+            stat[i] = estimator(x_wndwd)
+        end
+    elseif windowing == "left"
+        for i in (2*hw+1):nx
+            x_wndwd = left_wndw( x, i, hw )
+            stat[i] = estimator(x_wndwd)
+        end
+    elseif windowing == "right"
+        for i in 1:(nx-2*hw)
+            x_wndwd = right_wndw( x, i, hw )
+            stat[i] = estimator(x_wndwd)
+        end
+    end
+    return stat
+end
+
+function slide_estimator(X::Union{Matrix{T}, Adjoint{T, Matrix{T}}}, hw::Int, estimator) where {T<:Real}
+    return mapslices( x -> slide_estimator(x, hw, estimator), X, dims = 2 )
+end
+
+function slide_estimator(X::Array{T, 3}, hw::Int, estimator) where {T<:Real}
+    TI = similar(X)
+    for i in axes(TI, 1)
+        TI[i, :, :] = slide_estimator( X[i, :, :]', hw, estimator )'
+    end
+    return TI
+end
+
+function slide_estimator(X::CuArray{T, 2}, pwin::WindowingParams, estimator) where {T<:Real}
+    
+    Nstride = pwin.Nstride
+    N_indctr_wndw = pwin.N_indctr_wndw
+
+    strided_idx = N_indctr_wndw+1:2*Nstride:size(X,2)-N_indctr_wndw
+    TI = zeros(T, size(X, 1), length(strided_idx) )
+    for j1 in eachindex(strided_idx)         # TODO this might be optimized with loop vectorization?
+        j2 = strided_idx[j1]
+        TI[:, j1] = Array( estimator( X[:, j2-N_indctr_wndw:j2+N_indctr_wndw] ) )
+    end
+    return TI
+end
