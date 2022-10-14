@@ -25,7 +25,7 @@ function generate_stacked_fourier_surrogates(X::Matrix{T}, ns::Int) where {T<:Re
     return StackedSurrogates(S, nx, ns)
 end
 
-function gpu_generate_stacked_fourier_surrogates(X::CuArray{T, 2}, ns::Int) where {T<:Real}
+function generate_stacked_fourier_surrogates(X::CuArray{T, 2}, ns::Int) where {T<:Real}
     nx, nt = size(X)
     Fcuda = repeat( CUDA.CUFFT.rfft( X, 2 ), inner=(ns, 1) )
     stacked_surrogates = CUDA.CUFFT.irfft( Fcuda .* exp.(2*π*im .* CUDA.rand(nx*ns, size(Fcuda,2)) ), nt, 2 )
