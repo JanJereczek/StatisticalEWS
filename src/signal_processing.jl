@@ -1,10 +1,12 @@
+using RollingFunctions
+
 #####################################################
 #%% Smoothing
 #####################################################
 
 # Rollmean with output length = input length.
-function gettrend_rollmean(x::Vector{T}, hw::Int) where {T<:Real}
-    xtrend = rollmean(x, 2*hw+1)
+function gettrend_rollmean(x::Vector{T}, pwndw::WindowingParams) where {T<:Real}
+    xtrend = rollmean(x, 2*pwndw.N_smooth_wndw+1)
     # xtrend = vcat( fill(T(NaN), hw), xtrend, fill(T(NaN), hw) )
     # xtrend = vcat( x[1:hw], xtrend, x[end-hw+1:end] )
     return xtrend

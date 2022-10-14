@@ -1,4 +1,4 @@
-using CUDA, StatsBase
+using CUDA, Statistics, StatsBase, FFTW, SparseArrays
 
 #####################################################
 #%% Statistical moments
@@ -78,9 +78,10 @@ end
 #####################################################
 
 # AR1 coefficient of a vector x for white noise assumption.
+# M. Mudelsee, Climate Time Series Analysis, eq 2.4
 function ar1_whitenoise(x::Vector{T}) where {T<:Real}
     N = length(x)
-    return x[2:N]' * x[1:N-1] / x[2:N]' * x[2:N]        # M. Mudelsee, Climate Time Series Analysis, eq 2.4
+    return (x[2:N]' * x[1:N-1]) / (x[2:N]' * x[2:N])
 end
 
 # AR1 coefficients for a vertical stack of time series X for white noise assumption.
@@ -179,8 +180,8 @@ function slide_estimator(x::Vector{T}, hw::Int, estimator) where {T<:Real}
     nx = length(x)
     stat = fill(T(NaN), nx)
     for i in (hw+1):(nx-hw)
-        x_windowed = centered_window( x, i, hw )
-        stat[i] = estimator(x_windowed)
+        x_wndwd = centered_wndw( x, i, hw )
+        stat[i] = estimator(x_wndwd)
     end
     return stat[ .!isnan.(stat) ]
 end
@@ -190,18 +191,18 @@ function slide_estimator(x::Vector{T}, hw::Int, estimator, windowing::String) wh
     stat = fill(T(NaN), nx)
     if windowing == "center"
         for i in (hw+1):(nx-hw)
-            x_windowed = centered_window( x, i, hw )
-            stat[i] = estimator(x_windowed)
+            x_wndwd = centered_wndw( x, i, hw )
+            stat[i] = estimator(x_wndwd)
         end
     elseif windowing == "left"
         for i in (2*hw+1):nx
-            x_windowed = left_window( x, i, hw )
-            stat[i] = estimator(x_windowed)
+            x_wndwd = left_wndw( x, i, hw )
+            stat[i] = estimator(x_wndwd)
         end
     elseif windowing == "right"
         for i in 1:(nx-2*hw)
-            x_windowed = right_window( x, i, hw )
-            stat[i] = estimator(x_windowed)
+            x_wndwd = right_wndw( x, i, hw )
+            stat[i] = estimator(x_wndwd)
         end
     end
     return stat

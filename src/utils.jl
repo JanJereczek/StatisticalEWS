@@ -1,3 +1,5 @@
+using LinearAlgebra, SparseArrays, CairoMakie
+
 #####################################################
 #%% Windowing
 #####################################################
@@ -21,22 +23,22 @@ function get_windowing_params(Tvec::Vector{T}) where {T<:Real}
 end
 
 # Get window (half width hw) of vector x at index idx.
-centered_window(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - hw):( idx + hw ) ]
-left_window(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - 2*hw):idx ]
-right_window(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ idx:(idx + 2*hw) ]
+centered_wndw(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - hw):( idx + hw ) ]
+left_wndw(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ (idx - 2*hw):idx ]
+right_wndw(x::Vector{T}, idx::Int, hw::Int) where {T<:Real} = x[ idx:(idx + 2*hw) ]
 
 # Get window (half width hw) of matrix x at index idx.
-centered_window(X::Matrix{T}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - hw):( idx + hw ) ]
-left_window(X::Matrix{T}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - 2*hw):idx ]
-right_window(X::Matrix{T}, idx::Int, hw::Int) where {T<:Real} = X[ :, idx:(idx + 2*hw) ]
+centered_wndw(X::Matrix{T}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - hw):( idx + hw ) ]
+left_wndw(X::Matrix{T}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - 2*hw):idx ]
+right_wndw(X::Matrix{T}, idx::Int, hw::Int) where {T<:Real} = X[ :, idx:(idx + 2*hw) ]
 
 # Get window (half width hw) of matrix x at index idx.
-centered_window(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - hw):( idx + hw ) ]
-left_window(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - 2*hw):idx ]
-right_window(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, idx:(idx + 2*hw) ]
+centered_wndw(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - hw):( idx + hw ) ]
+left_wndw(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, (idx - 2*hw):idx ]
+right_wndw(X::CuArray{T, 2}, idx::Int, hw::Int) where {T<:Real} = X[ :, idx:(idx + 2*hw) ]
 
-trim_win(x::Vector{T}, hw::Int) where {T<:Real} = x[hw+1:end-hw]
-trim_win(X::Matrix{T}, hw::Int) where {T<:Real} = X[:, hw+1:end-hw]
+trim_wndw(x::Vector{T}, hw::Int) where {T<:Real} = x[hw+1:end-hw]
+trim_wndw(X::Matrix{T}, hw::Int) where {T<:Real} = X[:, hw+1:end-hw]
 
 #####################################################
 #%% Saving

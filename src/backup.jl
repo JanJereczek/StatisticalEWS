@@ -41,8 +41,8 @@ function window_ar1(x::Vector{T}, hw::Int) where {T<:Real}
     nx = length(x)
     φ_vec = fill(NaN, nx)
     for i in (hw+1):(nx-hw)
-        x_windowed = centered_window( x, i, hw )
-        φ_vec[i] = get_ar1(x_windowed)
+        x_wndwd = centered_window( x, i, hw )
+        φ_vec[i] = get_ar1(x_wndwd)
     end
     return φ_vec
 end
@@ -51,8 +51,8 @@ function window_var(x::Vector{T}, hw::Int) where {T<:Real}
     nx = length(x)
     σ_vec = fill(NaN, nx)
     for i in (hw+1):(nx-hw)
-        x_windowed = centered_window( x, i, hw )
-        σ_vec[i] = std(x_windowed)
+        x_wndwd = centered_window( x, i, hw )
+        σ_vec[i] = std(x_wndwd)
     end
     return σ_vec
 end
@@ -176,4 +176,13 @@ function ar1_whitenoise(X::CuArray{T, 3}, pwin::WindowingParams) where {T<:Real}
         TI[i, :, :] = Array( ar1_whitenoise( permutedims(X[i, :, :]), pwin ) )'
     end
     return TI
+end
+
+function fourier_surrogates3D(X::Matrix{T}, ns::Int) where {T<:Real}
+    nx, nt = size(X)
+    S = zeros(T, nx, nt, ns)
+    for i in 1:nx
+        S[i, :, :] = fourier_surrogates(X[i, :], ns)'
+    end
+    return S
 end

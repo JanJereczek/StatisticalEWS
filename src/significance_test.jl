@@ -3,13 +3,12 @@
 #####################################################
 
 # Shift each frequency content by a random phase.
-function fourier_surrogate(x::Vector{T}) where {T<:Real}
+function generate_fourier_surrogate(x::Vector{T}) where {T<:Real}
     F = rfft(x)
     return irfft( F .* exp.( 2*π*im .* rand(length(F)) ), length(x) )
 end
 
-# Generate ns surrogates of x.
-function fourier_surrogates(x::Vector{T}, ns::Int) where {T<:Real}
+function generate_fourier_surrogates(x::Vector{T}, ns::Int) where {T<:Real}
     S = zeros(T, ns, length(x))
     for i in axes(S, 1)
         S[i, :] = fourier_surrogate(x)
@@ -17,29 +16,28 @@ function fourier_surrogates(x::Vector{T}, ns::Int) where {T<:Real}
     return S
 end
 
-function fourier_surrogates3D(X::Matrix{T}, ns::Int) where {T<:Real}
-    nx, nt = size(X)
-    S = zeros(T, nx, nt, ns)
-    for i in 1:nx
-        S[i, :, :] = fourier_surrogates(X[i, :], ns)'
-    end
-    return S
-end
-
-function fourier_surrogates2D(X::Matrix{T}, ns::Int) where {T<:Real}
+function generate_stacked_fourier_surrogates(X::Matrix{T}, ns::Int) where {T<:Real}
     nx, nt = size(X)
     S = zeros(T, nx*ns, nt)
     for i in 1:nx
-        S[(i-1)*ns+1:i*ns, :] = fourier_surrogates(X[i, :], ns)
+        S[(i-1)*ns+1:i*ns, :] = generate_fourier_surrogates(X[i, :], ns)
     end
-    return S, nx, ns
+    return StackedSurrogates(S, nx, ns)
 end
 
-struct surrogates2D{T<:Real}
-    S::Matrix{T}
+function gpu_generate_stacked_fourier_surrogates(X::CuArray{T, 2}, ns::Int) where {T<:Real}
+    nx, nt = size(X)
+    Fcuda = repeat( CUDA.CUFFT.rfft( X, 2 ), inner=(ns, 1) )
+    stacked_surrogates = CUDA.CUFFT.irfft( Fcuda .* exp.(2*π*im .* CUDA.rand(nx*ns, size(Fcuda,2)) ), nt, 2 )
+    return StackedSurrogates(stacked_surrogates, nx, ns)
+end
+
+struct StackedSurrogates{T<:Real}
+    S::Union{Matrix{T}, CuArray{T, 2}}
     nx::Int
     ns::Int
 end
+
 #####################################################
 #%% Increase detection via Kendall-tau or regression
 #####################################################
@@ -76,9 +74,9 @@ function slide_regression(
     nx = length(x)
     w = fill(NaN, nx)
     for i in (hw+1):stride:(nx-hw)
-        x_windowed = centered_window( x, i, hw )
-        t_windowed = centered_window( t, i, hw )
-        w[i] = ridge_regression(t_windowed, x_windowed, λ)[1]
+        x_wndwd = centered_wndw( x, i, hw )
+        t_wndwd = centered_wndw( t, i, hw )
+        w[i] = ridge_regression(t_wndwd, x_wndwd, λ)[1]
     end
     return w
 end
@@ -97,9 +95,9 @@ function slide_kendall_tau(t::Vector{T}, x::Vector{T}, hw::Int, stride::Int) whe
     nx = length(x)
     kt = fill(NaN, nx)
     for i in (hw+1):stride:(nx-hw)
-        x_windowed = centered_window( x, i, hw )
-        t_windowed = centered_window( t, i, hw )
-        kt[i] = corkendall( t_windowed, x_windowed )
+        x_wndwd = centered_wndw( x, i, hw )
+        t_wndwd = centered_wndw( t, i, hw )
+        kt[i] = corkendall( t_wndwd, x_wndwd )
     end
     return kt
 end
