@@ -3,16 +3,21 @@
 #####################################################
 struct WindowingParams
     T0::Real
-    T_smooth_win::Real
-    T_indctr_win::Real
-    T_indctr_stride::Real
-    T_signif_win::Real
-    T_signif_stride::Real
-    N_smooth_win::Int
-    N_indctr_win::Int
-    N_indctr_stride::Int
-    N_signif_win::Int
-    N_signif_stride::Int
+    T_smooth_wndw::Real
+    T_indctr_wndw::Real
+    T_indctr_strd::Real
+    T_signif_wndw::Real
+    T_signif_strd::Real
+    N_smooth_wndw::Int
+    N_indctr_wndw::Int
+    N_indctr_strd::Int
+    N_signif_wndw::Int
+    N_signif_strd::Int
+end
+
+function get_windowing_params(Tvec::Vector{T}) where {T<:Real}
+    N = get_step.(Tvec[2:end], dt)
+    return WindowingParams(Tvec..., N...)
 end
 
 # Get window (half width hw) of vector x at index idx.

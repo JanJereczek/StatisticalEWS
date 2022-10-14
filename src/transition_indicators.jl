@@ -1,59 +1,31 @@
-using CUDA, BenchmarkTools
-
-#####################################################
-#%% Smoothing
-#####################################################
-
-# Rollmean with output length = input length.
-function gettrend_rollmean(x::Vector{T}, hw::Int) where {T<:Real}
-    xtrend = rollmean(x, 2*hw+1)
-    # xtrend = vcat( fill(T(NaN), hw), xtrend, fill(T(NaN), hw) )
-    # xtrend = vcat( x[1:hw], xtrend, x[end-hw+1:end] )
-    return xtrend
-end
-
-function gettrend_gaussiankernel(x::Vector{T}, σ::Int) where {T<:Real}
-    return imfilter( x, Kernel.gaussian((σ,)) )
-end
-
-# TODO implement further ways to detrend the signal
-function gettrend_loess(x::Vector{T}, σ::Int) where {T<:Real}
-    xtrend = x
-    return xtrend
-end
-
-function gettrend_dfa(x::Vector{T}, σ::Int) where {T<:Real}
-    xtrend = x
-    return xtrend
-end
-
-function gettrend_emd(x::Vector{T}, σ::Int) where {T<:Real}
-    xtrend = x
-    return xtrend
-end
-
-# Remove trend.
-function detrend(x::Vector{T}, x_trend::Vector{T}) where {T<:Real}
-    return x - x_trend
-end
+using CUDA, StatsBase
 
 #####################################################
 #%% Statistical moments
 #####################################################
 
-# Mean on GPU (helper).
+# Mean on GPU.
 function cumean(X::CuArray{T, 2}) where {T<:Real}
     return reduce( +, X, dims=2) ./ T(size(X, 2))
 end
 
-# Mean on GPU (helper).
-function cumean(X::CuArray{T, 2}, M::CuArray{T, 2}, pwin::WindowingParams) where {T<:Real}
-    return (X * M) ./ (2*pwin.Nindctr+1)
+# Accelerated masked mean on GPU.
+function cumean(
+    X::CuArray{T, 2},       # Array of which mean should be computed.
+    M::CuArray{T, 2},       # Mask matrix.
+    pwin::WindowingParams,  # Windowing parameter struct.
+) where {T<:Real}
+    return (X * M) ./ (2*pwin.N_indctr_wndw+1)
 end
 
 # Variance on CPU.
-function variance(x::Vector{T}) where {T<:Real}
+function cpvar(x::Vector{T}) where {T<:Real}
     return StatsBase.var(x)
+end
+
+# Variance on CPU.
+function cpvar(x::Matrix{T}) where {T<:Real}
+    return StatsBase.var(x, dims=2)
 end
 
 # Variance on GPU with provided mean.
@@ -68,7 +40,7 @@ function cuvar(X::CuArray{T, 2}) where {T<:Real}
 end
 
 # Skewness on CPU.
-function skw(x::Vector{T}) where {T<:Real}
+function cpskw(x::Vector{T}) where {T<:Real}
     return StatsBase.skewness(x)
 end
 
@@ -105,50 +77,39 @@ end
 #%% AR1 model
 #####################################################
 
-# Compute AR1 coefficient θ of a vector x for white noise assumption.
+# AR1 coefficient of a vector x for white noise assumption.
 function ar1_whitenoise(x::Vector{T}) where {T<:Real}
     N = length(x)
-    num = x[2:N]' * x[1:N-1]
-    denum = x[2:N]' * x[2:N]
-    θ = num / denum
-    return θ
+    return x[2:N]' * x[1:N-1] / x[2:N]' * x[2:N]        # M. Mudelsee, Climate Time Series Analysis, eq 2.4
 end
 
+# AR1 coefficients for a vertical stack of time series X for white noise assumption.
 function ar1_whitenoise(X::Array{T}) where {T<:Real}
-    return mapslices( x_ -> ar1_whitenoise(x_), X, dims=2)
+    # mapslices( x_ -> ar1_whitenoise(x_), X, dims=2)
+    return reduce( +, X[:, 2:end] .* X[:, 1:end-1], dims=2) ./ reduce( +, X[:, 2:end] .* X[:, 2:end], dims=2)
 end
 
-function ar1_whitenoise(x::CuArray{T, 2}) where {T<:Real}
-    return reduce( +, x[:, 2:end] .* x[:, 1:end-1], dims=2) ./ reduce( +, x[:, 2:end] .* x[:, 2:end], dims=2)
+# GPU accelerated AR1 coefficients for a vertical stack of time series X for white noise assumption.
+function ar1_whitenoise(X::CuArray{T, 2}) where {T<:Real}
+    return reduce( +, X[:, 2:end] .* X[:, 1:end-1], dims=2) ./ reduce( +, X[:, 2:end] .* X[:, 2:end], dims=2)
 end
 
-function gpuMask(
-    X::CuArray{T, 2},
-    pwin::WindowingParams,
-) where {T<:Real}
+# Compute mask (representing window sliding) used for some acclerated computation on GPU.
+function gpuMask(X::CuArray{T, 2}, pwin::WindowingParams) where {T<:Real}
     nt = size(X, 2)
-    M = CuArray( diagm([i => ones(T, nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...) )
+    M = CuArray( diagm([i => ones(T, nt-1-abs(i)) for i in -pwin.N_indctr_wndw:pwin.N_indctr_wndw]...) )
     return M
 end
 
-function ar1_whitenoise(
-    X::CuArray{T, 2},
-    M::CuArray{T, 2},
-) where {T<:Real}
+# Masked version of GPU-accelerated computation of AR1 with sliding window.
+function ar1_whitenoise(X::CuArray{T, 2}, M::CuArray{T, 2}) where {T<:Real}
     return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .^ 2) * M )
 end
 
-function ar1_whitenoise(X::CuArray{T, 3}, pwin::WindowingParams) where {T<:Real}
-    TI = zeros(T, size(X,1), size(X,2)-1, size(X,3))
-    for i in axes(TI, 1)
-        TI[i, :, :] = Array( ar1_whitenoise( permutedims(X[i, :, :]), pwin ) )'
-    end
-    return TI
-end
-
+# Masked version of CPU-sparse computation of AR1 with sliding window.
 function ar1_whitenoise(X::Matrix{T}, pwin) where {T<:Real}
     nt = size(X, 2)
-    M = spdiagm([i => ones(T, nt-1-abs(i)) for i in -pwin.Nindctr:pwin.Nindctr]...)
+    M = spdiagm([i => ones(T, nt-1-abs(i)) for i in -pwin.N_indctr_wndw:pwin.N_indctr_wndw]...)
     return ( (X[:, 2:end] .* X[:, 1:end-1]) * M ) ./ ( (X[:, 2:end] .^ 2) * M )
 end
 
@@ -169,7 +130,7 @@ end
 #%% Frequency spectrum
 #####################################################
 
-# Compute low-frequency power spectrum.
+# Compute low-frequency power spectrum on CPU.
 function lfps(x::Vector{T}; q_lowfreq=0.1) where {T<:Real}
     Psymmetrical = abs.(rfft(x) .^ 2)
     N = length(Psymmetrical)
@@ -180,10 +141,10 @@ function lfps(x::Vector{T}; q_lowfreq=0.1) where {T<:Real}
     return sum( Pnorm[1:nlow] )
 end
 
-function lfps(X::CuArray{T, 2}) where {T<:Real}
+function lfps(X::CuArray{T, 2}; q_lowfreq=0.1) where {T<:Real}
     P = abs.(CUDA.CUFFT.rfft( X, 2 )).^2
     Pnorm = P ./ reduce(+, P, dims=2)
-    return reduce(+, Pnorm[:, 1:roundint(0.1 * size(Pnorm, 2))], dims=2)
+    return reduce(+, Pnorm[:, 1:roundint(q_lowfreq * size(Pnorm, 2))], dims=2)
 end
 
 #####################################################
@@ -212,7 +173,8 @@ end
 
 # Mutliple dispatch:
 # - if windowing not specified, centered window is taken.
-# - if matrix input, apply mapslices.
+
+# 
 function slide_estimator(x::Vector{T}, hw::Int, estimator) where {T<:Real}
     nx = length(x)
     stat = fill(T(NaN), nx)
@@ -252,13 +214,13 @@ end
 function slide_estimator(X::CuArray{T, 2}, pwin::WindowingParams, estimator) where {T<:Real}
     
     Nstride = pwin.Nstride
-    Nindctr = pwin.Nindctr
+    N_indctr_wndw = pwin.N_indctr_wndw
 
-    stride_idx = Nindctr+1:2*Nstride:size(X,2)-Nindctr
+    stride_idx = N_indctr_wndw+1:2*Nstride:size(X,2)-N_indctr_wndw
     TI = zeros(T, size(X, 1), length(stride_idx) )
     for j1 in eachindex(stride_idx)         # TODO this might be optimized with loop vectorization?
         j2 = stride_idx[j1]
-        TI[:, j1] = Array( estimator( X[:, j2-Nindctr:j2+Nindctr] ) )
+        TI[:, j1] = Array( estimator( X[:, j2-N_indctr_wndw:j2+N_indctr_wndw] ) )
     end
     return TI
 end

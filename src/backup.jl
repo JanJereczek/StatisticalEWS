@@ -169,3 +169,11 @@ tullio_ar1( X::Matrix{T}, hw::Int ) where {T<:Real} = @tullio θ[:,y] := begin
     j = y
     @inbounds sum( (X[:, (j-hw+1):(j+hw)] .* X[:, (j-hw):(j+hw-1)]) ) ./ sum( (X[:, (j-hw+1):(j+hw)] .^ 2) )
 end (x in axes(X,1), y in axes(X,2))
+
+function ar1_whitenoise(X::CuArray{T, 3}, pwin::WindowingParams) where {T<:Real}
+    TI = zeros(T, size(X,1), size(X,2)-1, size(X,3))
+    for i in axes(TI, 1)
+        TI[i, :, :] = Array( ar1_whitenoise( permutedims(X[i, :, :]), pwin ) )'
+    end
+    return TI
+end
