@@ -246,3 +246,11 @@ function slide_estimator(X::CuArray{T, 2}, pwin::WindowingParams, estimator) whe
     end
     return TI
 end
+
+function get_wndw_params(pwndw::WindowingParams, type::String)
+    if type == "indicator"
+        return pwndw.N_indctr_wndw, pwndw.N_indctr_strd
+    elseif type == "indicator_trend"
+        return pwndw.N_signif_wndw, pwndw.N_signif_strd
+    end
+end

@@ -5,11 +5,8 @@ using RollingFunctions
 #####################################################
 
 # Rollmean with output length = input length.
-function gettrend_rollmean(x::Vector{T}, pwndw::WindowingParams) where {T<:Real}
-    xtrend = rollmean(x, 2*pwndw.N_smooth_wndw+1)
-    # xtrend = vcat( fill(T(NaN), hw), xtrend, fill(T(NaN), hw) )
-    # xtrend = vcat( x[1:hw], xtrend, x[end-hw+1:end] )
-    return xtrend
+function gettrend_rollmean(x::Vector{T}, p::WindowingParams) where {T<:Real}
+    return rollmean(x, 2*p.Nwndw+1)
 end
 
 function gettrend_gaussiankernel(x::Vector{T}, σ::Int) where {T<:Real}

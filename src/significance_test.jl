@@ -11,7 +11,7 @@ end
 function generate_fourier_surrogates(x::Vector{T}, ns::Int) where {T<:Real}
     S = zeros(T, ns, length(x))
     for i in axes(S, 1)
-        S[i, :] = fourier_surrogate(x)
+        S[i, :] = generate_fourier_surrogate(x)
     end
     return S
 end

@@ -54,6 +54,24 @@ centered_wndw(n_wndw::Int, n_strd::Int, nt::Int) = (n_wndw+1):n_strd:(nt-n_wndw)
 left_wndw(n_wndw::Int, n_strd::Int, nt::Int) = (2*n_wndw+1):n_strd:nt
 right_wndw(n_wndw::Int, n_strd::Int, nt::Int) = 1:n_strd:(nt-2*n_wndw)
 
+function trim_wndw(
+    x::Vector{T},
+    p::WindowingParams,
+    wndw,
+) where {T<:Real} 
+
+    return x[ wndw(p.Nwndw, p.Nstrd, length(x)) ]
+end
+
+function trim_wndw(
+    X::Matrix{T},
+    p::WindowingParams,
+    wndw,
+) where {T<:Real} 
+
+    return X[ :, wndw(p.Nwndw, p.Nstrd, size(X, 2)) ]
+end
+
 trim_wndw(x::Vector{T}, hw::Int) where {T<:Real} = x[hw+1:end-hw]
 trim_wndw(X::Matrix{T}, hw::Int) where {T<:Real} = X[:, hw+1:end-hw]
 
