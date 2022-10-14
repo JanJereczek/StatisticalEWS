@@ -3,18 +3,26 @@ using LinearAlgebra, SparseArrays, CairoMakie, CUDA
 #####################################################
 #%% Windowing
 #####################################################
+# struct WindowingParams
+#     T0::Real
+#     T_smooth_wndw::Real
+#     T_indctr_wndw::Real
+#     T_indctr_strd::Real
+#     T_signif_wndw::Real
+#     T_signif_strd::Real
+#     N_smooth_wndw::Int
+#     N_indctr_wndw::Int
+#     N_indctr_strd::Int
+#     N_signif_wndw::Int
+#     N_signif_strd::Int
+# end
+
 struct WindowingParams
-    T0::Real
-    T_smooth_wndw::Real
-    T_indctr_wndw::Real
-    T_indctr_strd::Real
-    T_signif_wndw::Real
-    T_signif_strd::Real
-    N_smooth_wndw::Int
-    N_indctr_wndw::Int
-    N_indctr_strd::Int
-    N_signif_wndw::Int
-    N_signif_strd::Int
+    dt::Real
+    Twndw::Real
+    Tstrd::Real
+    Nwndw::Int
+    Nstrd::Int
 end
 
 function get_windowing_params(Tvec::Vector{T}) where {T<:Real}
@@ -49,6 +57,8 @@ right_wndw(n_wndw::Int, n_strd::Int, nt::Int) = 1:n_strd:(nt-2*n_wndw)
 trim_wndw(x::Vector{T}, hw::Int) where {T<:Real} = x[hw+1:end-hw]
 trim_wndw(X::Matrix{T}, hw::Int) where {T<:Real} = X[:, hw+1:end-hw]
 
+trim_wndw(x::Vector{T}, n_wndw::Int, n_strd::Int, wndw) where {T<:Real} = x[wndw(n_wndw, n_strd, length(x))]
+
 #####################################################
 #%% Saving
 #####################################################
@@ -69,8 +79,8 @@ function roundint(x::Real)
     return Int( round( x ) )
 end
 
-function get_step(T::Real, T0::Real)
-    return roundint(T / T0)
+function get_step(time::Real, dt::Real)
+    return roundint(time / dt)
 end
 
 function lines_numeric!(ax, t, x, lbl)

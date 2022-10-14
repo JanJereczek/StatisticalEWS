@@ -175,41 +175,73 @@ end
 # Mutliple dispatch:
 # - if windowing not specified, centered window is taken.
 
-function slide_estimator(x::Vector{T}, pwndw::WindowingParams, estimator, wndw) where {T<:Real}
+function get_wndw_params(pwndw::WindowingParams, type::String)
+    if type == "indicator"
+        return pwndw.N_indctr_wndw, pwndw.N_indctr_strd
+    elseif type == "indicator_trend"
+        return pwndw.N_signif_wndw, pwndw.N_signif_strd
+    end
+end
+
+function slide_estimator(
+    x::Vector{T},
+    pwndw::WindowingParams,
+    estimator,
+    wndw,
+    type::String,
+) where {T<:Real}
+
     nt = length(x)
-    strided_idx = wndw(pwndw.N_indctr_wndw, pwndw.N_indctr_strd, nt)
+    n_wndw, n_strd = get_wndw_params(pwndw, type)
+    strided_idx = wndw(n_wndw, n_strd, nt)
     nidx = length(strided_idx)
 
     transition_indicator = fill(T(NaN), nidx)
     for j1 in eachindex(strided_idx)
         j2 = strided_idx[j1]
-        transition_indicator[j1] = estimator( wndw( x, j2, pwndw ) )
+        transition_indicator[j1] = estimator( wndw( x, j2, n_wndw ) )
     end
     return transition_indicator
 end
 
-function slide_estimator(X::Matrix{T}, pwndw::WindowingParams, estimator, wndw) where {T<:Real}
+function slide_estimator(
+    X::Matrix{T},
+    pwndw::WindowingParams,
+    estimator,
+    wndw,
+    type::String,
+) where {T<:Real}
+
     nl, nt = size(X)
-    strided_idx = wndw(pwndw.N_indctr_wndw, pwndw.N_indctr_strd, nt)
+    n_wndw, n_strd = get_wndw_params(pwndw, type)
+    strided_idx = wndw(n_wndw, n_strd, nt)
     nidx = length(strided_idx)
 
     transition_indicator = fill(T(NaN), nl, nidx)
     for j1 in eachindex(strided_idx)
         j2 = strided_idx[j1]
-        transition_indicator[:, j1] = estimator( wndw( X, j2, pwndw ) )
+        transition_indicator[:, j1] = estimator( wndw( X, j2, n_wndw ) )
     end
     return transition_indicator
 end
 
-function slide_estimator(X::CuArray{T, 2}, pwndw::WindowingParams, estimator, wndw) where {T<:Real}
+function slide_estimator(
+    X::CuArray{T, 2},
+    pwndw::WindowingParams,
+    estimator,
+    wndw,
+    type::String,
+) where {T<:Real}
+
     nl, nt = size(X)
-    strided_idx = wndw(pwndw.N_indctr_wndw, pwndw.N_indctr_strd, nt)
+    n_wndw, n_strd = get_wndw_params(pwndw, type)
+    strided_idx = wndw(n_wndw, n_strd, nt)
     nidx = length(strided_idx)
 
     transition_indicator = fill(T(NaN), nl, nidx)
     for j1 in eachindex(strided_idx)
         j2 = strided_idx[j1]
-        transition_indicator[:, j1] = Array( estimator( wndw( X, j2, pwndw ) ) )
+        transition_indicator[:, j1] = Array( estimator( wndw( X, j2, n_wndw ) ) )
     end
     return transition_indicator
 end
