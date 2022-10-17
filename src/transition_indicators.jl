@@ -5,12 +5,12 @@ using Statistics, StatsBase, FFTW, SparseArrays
 #####################################################
 
 # Mean on GPU.
-function cumean(X::CuArray{T, 2}) where {T<:Real}
+function mean(X::CuArray{T, 2}) where {T<:Real}
     return reduce( +, X, dims=2) ./ T(size(X, 2))
 end
 
 # Accelerated masked mean on GPU.
-function cumean(
+function mean(
     X::CuArray{T, 2},       # Array of which mean should be computed.
     M::CuArray{T, 2},       # Mask matrix.
     pwin::WindowingParams,  # Windowing parameter struct.
@@ -19,41 +19,51 @@ function cumean(
 end
 
 # Variance on CPU.
-function cpvar(x::Vector{T}) where {T<:Real}
+function var(x::Vector{T}) where {T<:Real}
     return StatsBase.var(x)
 end
 
 # Variance on CPU.
-function cpvar(x::Matrix{T}) where {T<:Real}
+function var(x::Matrix{T}) where {T<:Real}
     return StatsBase.var(x, dims=2)
 end
 
 # Variance on GPU with provided mean.
-function cuvar(X::CuArray{T, 2}, x_mean::CuArray{T, 2}) where {T<:Real}
+function var(X::CuArray{T, 2}, x_mean::CuArray{T, 2}) where {T<:Real}
     return reduce( +, (X .- x_mean).^2, dims=2) ./ T(size(X, 2) - 1)
 end
 
 # Variance on GPU.
-function cuvar(X::CuArray{T, 2}) where {T<:Real}
-    x_mean = cumean(X)
-    return cuvar(X, x_mean)
+function var(X::CuArray{T, 2}) where {T<:Real}
+    x_mean = mean(X)
+    return var(X, x_mean)
 end
 
 # Skewness on CPU.
-function cpskw(x::Vector{T}) where {T<:Real}
+function skw(x::Vector{T}) where {T<:Real}
     return StatsBase.skewness(x)
 end
 
+function skw(X::Matrix{T}, x_mean::Matrix{T}, x_var::Matrix{T}) where {T<:Real}
+    return reduce( +, (X .- x_mean).^3, dims=2) ./ size(X, 2) ./ (x_var .^ T(1.5))
+end
+
+function skw(X::Matrix{T}) where {T<:Real}
+    x_mean = StatsBase.mean(X, dims=2)
+    x_var = var(X)
+    return skw(X, x_mean, x_var)
+end
+
 # Skewness on GPU with provided mean and variance.
-function cuskw(X::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
+function skw(X::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
     return reduce( +, (X .- x_mean).^3, dims=2) ./ size(X, 2) ./ (x_var .^ T(1.5))
 end
 
 # Skewness on GPU.
-function cuskw(X::CuArray{T, 2}) where {T<:Real}
-    x_mean = cumean(X)
-    x_var = cuvar(X)
-    return cuskw(X, x_mean, x_var)
+function skw(X::CuArray{T, 2}) where {T<:Real}
+    x_mean = mean(X)
+    x_var = var(X)
+    return skw(X, x_mean, x_var)
 end
 
 # Kurtosis on CPU.
@@ -61,16 +71,26 @@ function krt(x::Vector{T}) where {T<:Real}
     return StatsBase.kurtosis(x)
 end
 
+function krt(X::Matrix{T}, x_mean::Matrix{T}, x_var::Matrix{T}) where {T<:Real}
+    return reduce( +, (X .- x_mean).^3, dims=2) ./ size(X, 2) ./ (x_var .^ T(1.5))
+end
+
+function krt(X::Matrix{T}) where {T<:Real}
+    x_mean = StatsBase.mean(X, dims=2)
+    x_var = var(X)
+    return reduce( +, (X .- x_mean).^3, dims=2) ./ size(X, 2) ./ (x_var .^ T(1.5))
+end
+
 # Kurtosis on GPU with provided mean and variance.
-function cukrt(X::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
+function krt(X::CuArray{T, 2}, x_mean::CuArray{T, 2}, x_var::CuArray{T, 2}) where {T<:Real}
     return reduce( +, (X .- x_mean) .^ 4, dims=2 ) ./ size(X, 2) ./ (x_var .^ 2)
 end
 
 # Kurtosis on GPU.
-function cukrt(X::CuArray{T, 2}) where {T<:Real}
-    x_mean = cumean(X)
-    x_var = cuvar(X)
-    return cukrt(X, x_mean, x_var)
+function krt(X::CuArray{T, 2}) where {T<:Real}
+    x_mean = mean(X)
+    x_var = var(X)
+    return krt(X, x_mean, x_var)
 end
 
 #####################################################
@@ -144,8 +164,14 @@ function lfps(x::Vector{T}; q_lowfreq=0.1) where {T<:Real}
     return sum( Pnorm[1:nlow] )
 end
 
+function lfps(X::Matrix{T}; q_lowfreq=0.1) where {T<:Real}
+    P = abs.(rfft(X, 2)) # .^ 2
+    Pnorm = P ./ reduce(+, P, dims=2)
+    return reduce(+, Pnorm[:, 1:roundint(q_lowfreq * size(Pnorm, 2))], dims=2)
+end
+
 function lfps(X::CuArray{T, 2}; q_lowfreq=0.1) where {T<:Real}
-    P = abs.(CUDA.CUFFT.rfft( X, 2 )).^2
+    P = abs.(CUDA.CUFFT.rfft( X, 2 )) # .^2
     Pnorm = P ./ reduce(+, P, dims=2)
     return reduce(+, Pnorm[:, 1:roundint(q_lowfreq * size(Pnorm, 2))], dims=2)
 end
