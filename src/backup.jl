@@ -300,3 +300,25 @@ end
 #     return x + 1 + f9(;kwargs...)
 # end
 # f10(0; X...)
+
+struct StackedSurrogates{T<:Real}
+    S::Union{Matrix{T}, CuArray{T, 2}}
+    nx::Int
+    ns::Int
+end
+# StackedSurrogates(stacked_surrogates, nx, ns)
+# StackedSurrogates(S, nx, ns)
+
+# struct WindowingParams
+#     T0::Real
+#     T_smooth_wndw::Real
+#     T_indctr_wndw::Real
+#     T_indctr_strd::Real
+#     T_signif_wndw::Real
+#     T_signif_strd::Real
+#     N_smooth_wndw::Int
+#     N_indctr_wndw::Int
+#     N_indctr_strd::Int
+#     N_signif_wndw::Int
+#     N_signif_strd::Int
+# end

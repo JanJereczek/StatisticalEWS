@@ -18,25 +18,21 @@ end
 
 function generate_stacked_fourier_surrogates(X::Matrix{T}, ns::Int) where {T<:Real}
     nx, nt = size(X)
-    S = zeros(T, nx*ns, nt)
+    stacked_surrogates = zeros(T, nx*ns, nt)
     for i in 1:nx
-        S[(i-1)*ns+1:i*ns, :] = generate_fourier_surrogates(X[i, :], ns)
+        stacked_surrogates[(i-1)*ns+1:i*ns, :] = generate_fourier_surrogates(X[i, :], ns)
     end
-    return StackedSurrogates(S, nx, ns)
+    return stacked_surrogates
 end
 
 function generate_stacked_fourier_surrogates(X::CuArray{T, 2}, ns::Int) where {T<:Real}
     nx, nt = size(X)
     Fcuda = repeat( CUDA.CUFFT.rfft( X, 2 ), inner=(ns, 1) )
     stacked_surrogates = CUDA.CUFFT.irfft( Fcuda .* exp.(2*π*im .* CUDA.rand(nx*ns, size(Fcuda,2)) ), nt, 2 )
-    return StackedSurrogates(stacked_surrogates, nx, ns)
+    return stacked_surrogates
 end
 
-struct StackedSurrogates{T<:Real}
-    S::Union{Matrix{T}, CuArray{T, 2}}
-    nx::Int
-    ns::Int
-end
+
 
 #####################################################
 #%% Increase detection via Kendall-tau or regression

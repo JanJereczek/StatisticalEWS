@@ -3,20 +3,6 @@ using LinearAlgebra, SparseArrays, CairoMakie, CUDA
 #####################################################
 #%% Windowing
 #####################################################
-# struct WindowingParams
-#     T0::Real
-#     T_smooth_wndw::Real
-#     T_indctr_wndw::Real
-#     T_indctr_strd::Real
-#     T_signif_wndw::Real
-#     T_signif_strd::Real
-#     N_smooth_wndw::Int
-#     N_indctr_wndw::Int
-#     N_indctr_strd::Int
-#     N_signif_wndw::Int
-#     N_signif_strd::Int
-# end
-
 struct WindowingParams
     dt::Real
     Twndw::Real
