@@ -229,5 +229,5 @@ function slide_estimator(
         j2 = strided_idx[j1]
         transition_indicator[:, j1] = Array( estimator( wndw( X, j2, p.Nwndw ) ) )
     end
-    return transition_indicator
+    return CuArray( transition_indicator )
 end

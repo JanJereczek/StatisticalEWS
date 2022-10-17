@@ -54,8 +54,7 @@ end
 function ridge_regression(t::Vector{T}, Y::CuArray{T, 2}, λ::Real) where {T<:Real}
     t = t .- t[1]
     T_bias_ext = hcat( t, ones(length(t)) )'
-    U = CuArray( inv(T_bias_ext * T_bias_ext' + λ .* I(2)) )
-    W = U * CuArray( T_bias_ext ) * Y
+    W = CuArray( inv(T_bias_ext * T_bias_ext' + λ .* I(2)) ) * CuArray( T_bias_ext ) * permutedims(Y)
     return W
 end
 
