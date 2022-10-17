@@ -26,7 +26,7 @@ struct WindowingParams
 end
 
 function get_windowing_params(Tvec::Vector{T}) where {T<:Real}
-    N = get_step.(Tvec[2:end], dt)
+    N = get_step.(Tvec[2:end], Tvec[1])
     return WindowingParams(Tvec..., N...)
 end
 

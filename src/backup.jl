@@ -254,3 +254,49 @@ function get_wndw_params(pwndw::WindowingParams, type::String)
         return pwndw.N_signif_wndw, pwndw.N_signif_strd
     end
 end
+
+
+function slide_regression(
+    x::Vector{T},
+    t::Vector{T},
+    hw::Int,
+    stride::Int,
+    λ=0::Real,
+) where {T<:Real}
+
+    nx = length(x)
+    w = fill(NaN, nx)
+    for i in (hw+1):stride:(nx-hw)
+        x_wndwd = centered_wndw( x, i, hw )
+        t_wndwd = centered_wndw( t, i, hw )
+        w[i] = ridge_regression(t_wndwd, x_wndwd, λ)[1]
+    end
+    return w
+end
+
+function slide_regression(
+    S::Matrix{T},
+    t::Vector{T},
+    hw::Int,
+    stride::Int,
+    λ=0::Real,
+) where {T<:Real}
+    return mapslices( x -> slide_regression(t, x, hw, λ, stride), S, dims = 2 )
+end
+
+# function f6(;a=0, b=0)
+#     return a + b
+# end
+# function f8(x; kwargs...)
+#     return x + 1 + f6(;kwargs...)
+# end
+# f8(0; X...)
+
+
+# function f9(;a, b)
+#     return a + b
+# end
+# function f10(x; kwargs...)
+#     return x + 1 + f9(;kwargs...)
+# end
+# f10(0; X...)

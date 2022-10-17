@@ -77,6 +77,8 @@ end
 #%% AR1 model
 #####################################################
 
+# TODO right thorough tests for each function.
+
 # AR1 coefficient of a vector x for white noise assumption.
 # M. Mudelsee, Climate Time Series Analysis, eq 2.4
 function ar1_whitenoise(x::Vector{T}) where {T<:Real}
